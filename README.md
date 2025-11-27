@@ -10,12 +10,36 @@ A macOS application that converts video files into native screensavers.
 - **Smart Bundle IDs**: Automatically generates clean bundle identifiers
 - **Native Performance**: Built with SwiftUI and Objective-C
 
-## How It Works
+## Installation
 
-Buatsaver consists of two components:
+### For Users
 
-1. **Template Screensaver** (`Buatsaver/`): An Objective-C screensaver that plays videos using AVFoundation
-2. **Builder App** (`BuatsaverApp/`): A SwiftUI app that packages your video into the template
+1. Download the latest `Buatsaver-x.x.x.dmg` from [Releases](https://github.com/zetkey/Buatsaver/releases)
+2. Open the DMG file
+3. Drag `Buatsaver.app` to your Applications folder
+4. **Important**: Right-click on `Buatsaver.app` and select "Open" (first time only)
+5. Click "Open" in the security dialog
+
+> **Note**: This app is unsigned. macOS will show a security warning on first launch. This is normal for apps distributed outside the App Store.
+
+### Alternative: Remove Quarantine Flag
+
+If you prefer, you can remove the quarantine flag:
+
+```bash
+xattr -cr /Applications/Buatsaver.app
+```
+
+## Usage
+
+1. Launch `Buatsaver.app`
+2. Click **Choose Video** and select your video file
+3. (Optional) Customize the thumbnail by clicking **Choose Image**
+4. Enter a name for your screensaver
+5. Click **Generate .saver**
+6. Double-click the generated `.saver` file to install
+
+The screensaver will appear in **System Settings > Screen Saver**.
 
 ## Building from Source
 
@@ -54,16 +78,32 @@ swift build -c release
 ./bundle_app.sh
 ```
 
-## Usage
+## Creating a Release
 
-1. Launch `Buatsaver.app`
-2. Click **Choose Video** and select your video file
-3. (Optional) Customize the thumbnail by clicking **Choose Image**
-4. Enter a name for your screensaver
-5. Click **Generate .saver**
-6. Double-click the generated `.saver` file to install
+For maintainers:
 
-The screensaver will appear in **System Settings > Screen Saver**.
+```bash
+# 1. Update version in VERSION file
+echo "1.0.1" > VERSION
+
+# 2. Build the app
+./build_all.sh
+
+# 3. Create DMG
+cd dmg && ./create_dmg.sh && cd ..
+
+# 4. Create GitHub release
+gh release create v1.0.1 Buatsaver-1.0.1.dmg \
+  --title "Buatsaver v1.0.1" \
+  --notes "Release notes here"
+```
+
+## How It Works
+
+Buatsaver consists of two components:
+
+1. **Template Screensaver** (`Buatsaver/`): An Objective-C screensaver that plays videos using AVFoundation
+2. **Builder App** (`BuatsaverApp/`): A SwiftUI app that packages your video into the template
 
 ## Technical Details
 

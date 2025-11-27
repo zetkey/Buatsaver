@@ -29,6 +29,8 @@ Packages/
 Buatsaver.app/
 Buatsaver.saver/
 Resources/
+*.dmg
+dmg/temp/
 
 # IDE
 .vscode/

@@ -5,6 +5,13 @@ APP_NAME="Buatsaver"
 EXECUTABLE="BuatsaverApp"
 OUTPUT_DIR="."
 
+# Read version from VERSION file
+if [ -f "../VERSION" ]; then
+    VERSION=$(cat ../VERSION)
+else
+    VERSION="1.0.0"
+fi
+
 # Auto-detect build directory (prefer release, fallback to debug)
 if [ -d ".build/release" ]; then
     BUILD_DIR=".build/release"
@@ -16,6 +23,7 @@ else
 fi
 
 echo "Creating $APP_NAME.app..."
+echo "Version: $VERSION"
 echo "Using build from: $BUILD_DIR"
 
 # Create directory structure
@@ -24,6 +32,13 @@ mkdir -p "$OUTPUT_DIR/$APP_NAME.app/Contents/Resources"
 
 # Copy executable
 cp "$BUILD_DIR/$EXECUTABLE" "$OUTPUT_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+
+# Copy app icon if it exists
+APP_ICON_PATH="./AppIcon.icns"
+if [ -f "$APP_ICON_PATH" ]; then
+    echo "Copying app icon..."
+    cp "$APP_ICON_PATH" "$OUTPUT_DIR/$APP_NAME.app/Contents/Resources/$APP_NAME.icns"
+fi
 
 # Copy resources (SwiftPM puts them in a bundle directory next to the binary)
 # The bundle name is usually PackageName_TargetName.bundle
@@ -45,17 +60,19 @@ cat > "$OUTPUT_DIR/$APP_NAME.app/Contents/Info.plist" <<EOF
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.$APP_NAME</string>
+    <string>id.my.zetkey.buatsaver</string>
     <key>CFBundleName</key>
     <string>$APP_NAME</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$VERSION</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
+    <key>CFBundleIconFile</key>
+    <string>$APP_NAME.icns</string>
 </dict>
 </plist>
 EOF
