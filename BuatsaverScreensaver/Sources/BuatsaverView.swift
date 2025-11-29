@@ -57,29 +57,16 @@ class BuatsaverView: ScreenSaverView {
 
     private func findVideo() {
         let bundle = Bundle(for: type(of: self))
-        NSLog("Buatsaver: Bundle path: \(bundle.bundlePath)")
-        NSLog("Buatsaver: Resources path: \(bundle.resourcePath ?? "nil")")
 
         // Try to find video.mp4 or video.mov
         if let mp4URL = bundle.url(forResource: "video", withExtension: "mp4") {
             videoURL = mp4URL
-            NSLog("Buatsaver: Found video.mp4 at: \(mp4URL.path)")
         } else if let movURL = bundle.url(forResource: "video", withExtension: "mov") {
             videoURL = movURL
-            NSLog("Buatsaver: Found video.mov at: \(movURL.path)")
         } else {
-            NSLog("Buatsaver: ERROR - No video found in bundle!")
-            NSLog("Buatsaver: Bundle resources: \(bundle.resourcePath ?? "none")")
-
-            // List all files in Resources to debug
-            if let resourcePath = bundle.resourcePath {
-                do {
-                    let files = try FileManager.default.contentsOfDirectory(atPath: resourcePath)
-                    NSLog("Buatsaver: Files in Resources: \(files)")
-                } catch {
-                    NSLog("Buatsaver: Error listing files: \(error)")
-                }
-            }
+            NSLog(
+                "Buatsaver ERROR: No video found in bundle at \(bundle.resourcePath ?? "unknown path")"
+            )
 
             // Set red background to indicate error
             if let layer = layer {
@@ -91,17 +78,10 @@ class BuatsaverView: ScreenSaverView {
     // MARK: - Player Setup
 
     private func setupPlayer() {
-        guard let url = videoURL else {
-            NSLog("Buatsaver: Cannot setup player - no video URL")
+        guard let url = videoURL, let viewLayer = layer else {
+            NSLog("Buatsaver ERROR: Cannot setup player")
             return
         }
-
-        guard let viewLayer = layer else {
-            NSLog("Buatsaver: Cannot setup player - no view layer")
-            return
-        }
-
-        NSLog("Buatsaver: Setting up player with video: \(url.path)")
 
         // Create player
         let playerItem = AVPlayerItem(url: url)
@@ -122,8 +102,6 @@ class BuatsaverView: ScreenSaverView {
         viewLayer.addSublayer(newPlayerLayer)
         playerLayer = newPlayerLayer
 
-        NSLog("Buatsaver: Player layer added with frame: \(newPlayerLayer.frame)")
-
         // Setup looping notification
         NotificationCenter.default.addObserver(
             self,
@@ -134,8 +112,6 @@ class BuatsaverView: ScreenSaverView {
 
         // Observe player status
         player?.currentItem?.addObserver(self, forKeyPath: "status", options: [.new], context: nil)
-
-        NSLog("Buatsaver: Player setup complete")
     }
 
     override func observeValue(
@@ -145,31 +121,15 @@ class BuatsaverView: ScreenSaverView {
         if keyPath == "status" {
             if let statusNumber = change?[.newKey] as? NSNumber {
                 let status = AVPlayerItem.Status(rawValue: statusNumber.intValue)
-                NSLog("Buatsaver: Player status changed to: \(status?.rawValue ?? -1)")
 
-                switch status {
-                case .readyToPlay:
-                    NSLog("Buatsaver: Player ready to play")
-                case .failed:
-                    if let error = player?.currentItem?.error {
-                        NSLog("Buatsaver: Player failed with error: \(error)")
-                        NSLog("Buatsaver: Error domain: \(error._domain)")
-                        NSLog("Buatsaver: Error code: \(error._code)")
-                        NSLog("Buatsaver: Error description: \(error.localizedDescription)")
-                    } else {
-                        NSLog("Buatsaver: Player failed with unknown error")
-                    }
-                case .unknown:
-                    NSLog("Buatsaver: Player status unknown")
-                default:
-                    break
+                if status == .failed, let error = player?.currentItem?.error {
+                    NSLog("Buatsaver ERROR: Player failed - \(error.localizedDescription)")
                 }
             }
         }
     }
 
     @objc private func playerItemDidReachEnd(_ notification: Notification) {
-        NSLog("Buatsaver: Video reached end, looping...")
         guard let item = notification.object as? AVPlayerItem else { return }
         item.seek(to: .zero, completionHandler: nil)
         player?.play()
@@ -179,7 +139,6 @@ class BuatsaverView: ScreenSaverView {
 
     override func startAnimation() {
         super.startAnimation()
-        NSLog("Buatsaver: startAnimation called")
 
         // Setup player if not already done
         if player == nil {
@@ -188,12 +147,10 @@ class BuatsaverView: ScreenSaverView {
 
         // Start playing
         player?.play()
-        NSLog("Buatsaver: Player play() called")
     }
 
     override func stopAnimation() {
         super.stopAnimation()
-        NSLog("Buatsaver: stopAnimation called")
         player?.pause()
     }
 
@@ -206,7 +163,6 @@ class BuatsaverView: ScreenSaverView {
     override func layout() {
         super.layout()
         playerLayer?.frame = bounds
-        NSLog("Buatsaver: Layout updated, player layer frame: \(playerLayer?.frame ?? .zero)")
     }
 
     override var frame: NSRect {

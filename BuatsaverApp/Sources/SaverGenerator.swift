@@ -128,30 +128,4 @@ struct SaverGenerator {
         )
         try plistData.write(to: infoPlistURL)
     }
-
-    /// Clears the macOS screensaver cache to force reload of new screensavers
-    private static func clearScreenSaverCache() {
-        let task = Process()
-        task.launchPath = "/usr/bin/killall"
-        task.arguments = ["-9", "legacyScreenSaver"]
-
-        do {
-            try task.run()
-            task.waitUntilExit()
-        } catch {
-            // Ignore errors - process might not be running
-        }
-
-        // Also try to kill the screen saver engine
-        let task2 = Process()
-        task2.launchPath = "/usr/bin/killall"
-        task2.arguments = ["-9", "ScreenSaverEngine"]
-
-        do {
-            try task2.run()
-            task2.waitUntilExit()
-        } catch {
-            // Ignore errors
-        }
-    }
 }
