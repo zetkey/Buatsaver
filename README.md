@@ -4,12 +4,19 @@ A modern macOS application that converts video files into native screensavers. B
 
 ## Features
 
+- **Universal Binary**: Native support for both Apple Silicon (M1/M2/M3) and Intel Macs
+- **Optimized Performance**: Smooth, stutter-free video playback with AVPlayerLooper
 - **Modern SwiftUI Interface**: Beautiful, intuitive drag-and-drop interface
 - **Video Support**: Works with `.mp4` and `.mov` files
 - **Auto-Thumbnail**: Automatically generates thumbnails from your videos
 - **Custom Icons**: Sets the generated screensaver's icon to the thumbnail
 - **Smart Bundle IDs**: Automatically generates clean bundle identifiers
-- **Native Performance**: Built entirely in Swift for optimal performance
+- **Architecture Detection**: Automatically generates screensavers optimized for your Mac's architecture
+
+## System Requirements
+
+- macOS 12.0 or later
+- Works on both Apple Silicon (M1/M2/M3) and Intel Macs
 
 ## Building from Source
 
@@ -22,44 +29,32 @@ A modern macOS application that converts video files into native screensavers. B
 ### Quick Build
 
 ```bash
-chmod +x Scripts/build.sh
-./Scripts/build.sh
+make build
 ```
 
 The app will be created at `build/Release/Buatsaver.app`.
 
-### Manual Build Steps
-
-The build script compiles both the screensaver bundle and the main app:
-
-```bash
-# Build screensaver
-swiftc -target x86_64-apple-macos12.0 \
-    -framework ScreenSaver -framework AVFoundation \
-    -emit-executable \
-    -o build/Release/BuatsaverScreensaver.saver/Contents/MacOS/BuatsaverScreensaver \
-    BuatsaverScreensaver/Sources/BuatsaverView.swift
-
-# Build app
-swiftc -target x86_64-apple-macos12.0 \
-    -framework SwiftUI -framework AppKit -framework AVFoundation \
-    -emit-executable \
-    -o build/Release/Buatsaver.app/Contents/MacOS/BuatsaverApp \
-    BuatsaverApp/Sources/*.swift BuatsaverApp/Sources/Components/*.swift
-```
-
 ### Using Make
 
 ```bash
-make build          # Build the application
+make build          # Build the application (universal binary)
 make dmg            # Build and create DMG
 make clean          # Clean build artifacts
 ```
 
-### Output Structure
-The build process creates:
+### Build Output
+
+The build process creates universal binaries (arm64 + x86_64):
 - `build/Release/Buatsaver.app` - Main application bundle
-- `build/Release/BuatsaverScreensaver.saver` - Screensaver bundle
+- `build/Release/BuatsaverScreensaver.saver` - Pre-built screensaver bundle
+
+### Architecture Support
+
+The build system automatically creates universal binaries that run natively on both:
+- **Apple Silicon** (M1, M2, M3, M4) - arm64
+- **Intel Macs** - x86_64
+
+When you generate a screensaver, the app automatically detects your Mac's architecture and creates an optimized screensaver for maximum performance.
 
 ## Installation (For Built App)
 
@@ -85,12 +80,32 @@ xattr -cr /Applications/Buatsaver.app
 
 1. Launch `Buatsaver.app`
 2. **Drag and drop** your video file or click **Choose Video File**
-3. (Optional) Customize the thumbnail by clicking **Choose Image** or **Generate from Video**
+3. (Optional) Customize the thumbnail by clicking **Change**
 4. Enter a name for your screensaver
 5. Click **Generate Screensaver**
 6. Double-click the generated `.saver` file to install
 
 The screensaver will appear in **System Settings > Screen Saver**.
+
+## Performance
+
+Version 3.0.0 includes significant performance improvements:
+
+- **Native Apple Silicon support** - No Rosetta 2 translation overhead
+- **Optimized video playback** - Using AVPlayerLooper for seamless looping
+- **Smooth playback** - 10-second buffer for stutter-free performance
+- **Low CPU usage** - Typically < 5% on modern Macs
+
+## Technical Details
+
+For developers interested in the technical implementation:
+
+- **Video Playback**: AVQueuePlayer with AVPlayerLooper for seamless looping
+- **Architecture Detection**: Compile-time detection for optimal screensaver generation
+- **Build System**: Universal binaries using lipo to combine arm64 and x86_64
+- **Frameworks**: ScreenSaver, AVFoundation, SwiftUI, AppKit
+
+See [Docs/](Docs/) for detailed technical documentation.
 
 ## License
 

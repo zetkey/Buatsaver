@@ -135,10 +135,19 @@ struct SaverGenerator {
             throw SaverGeneratorError.invalidPath
         }
 
+        // Detect current architecture to compile native screensaver
+        #if arch(arm64)
+            let targetArch = "arm64-apple-macos12.0"
+        #elseif arch(x86_64)
+            let targetArch = "x86_64-apple-macos12.0"
+        #else
+            let targetArch = "arm64-apple-macos12.0"  // Default to ARM64
+        #endif
+
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/swiftc")
         task.arguments = [
-            "-target", "arm64-apple-macos12.0",
+            "-target", targetArch,
             "-emit-library",
             "-module-name", moduleName,
             "-framework", "ScreenSaver",

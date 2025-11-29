@@ -31,7 +31,8 @@ mkdir -p "$SAVER_MACOS"
 mkdir -p "$SAVER_RESOURCES"
 
 # Compile the screensaver as a dynamic library with optimizations
-# Optimize for speed (-O flag)
+# Build for both architectures and create universal binary
+echo "  Building for arm64..."
 swiftc \
     -target arm64-apple-macos12.0 \
     -O \
@@ -42,8 +43,31 @@ swiftc \
     -framework AVKit \
     -framework Cocoa \
     -Xlinker -install_name -Xlinker @executable_path/../Frameworks/BuatsaverScreensaver.framework/Versions/A/BuatsaverScreensaver \
-    -o "$SAVER_MACOS/$SAVER_NAME" \
+    -o "$SAVER_MACOS/${SAVER_NAME}_arm64" \
     "$PROJECT_ROOT/BuatsaverScreensaver/Sources/BuatsaverView.swift"
+
+echo "  Building for x86_64..."
+swiftc \
+    -target x86_64-apple-macos12.0 \
+    -O \
+    -emit-library \
+    -module-name BuatsaverScreensaver \
+    -framework ScreenSaver \
+    -framework AVFoundation \
+    -framework AVKit \
+    -framework Cocoa \
+    -Xlinker -install_name -Xlinker @executable_path/../Frameworks/BuatsaverScreensaver.framework/Versions/A/BuatsaverScreensaver \
+    -o "$SAVER_MACOS/${SAVER_NAME}_x86_64" \
+    "$PROJECT_ROOT/BuatsaverScreensaver/Sources/BuatsaverView.swift"
+
+echo "  Creating universal binary..."
+lipo -create \
+    "$SAVER_MACOS/${SAVER_NAME}_arm64" \
+    "$SAVER_MACOS/${SAVER_NAME}_x86_64" \
+    -output "$SAVER_MACOS/$SAVER_NAME"
+
+# Clean up architecture-specific binaries
+rm "$SAVER_MACOS/${SAVER_NAME}_arm64" "$SAVER_MACOS/${SAVER_NAME}_x86_64"
 
 # Copy Info.plist
 cp "$PROJECT_ROOT/BuatsaverScreensaver/Info.plist" "$SAVER_CONTENTS/Info.plist"
@@ -69,7 +93,21 @@ mkdir -p "$APP_MACOS"
 mkdir -p "$APP_RESOURCES"
 
 # Compile the app with optimizations
-# Optimize for speed (-O flag)
+# Build for both architectures and create universal binary
+SOURCE_FILES=(
+    "$PROJECT_ROOT/BuatsaverApp/Sources/BuatsaverApp.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/ContentView.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/SaverGenerator.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/FileDropZone.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernButton.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernTextField.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ConfigurationSection.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ThumbnailCache.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Models/BuatsaverError.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Utilities/ValidationUtility.swift"
+)
+
+echo "  Building for arm64..."
 swiftc \
     -target arm64-apple-macos12.0 \
     -O \
@@ -78,17 +116,29 @@ swiftc \
     -framework AVFoundation \
     -framework UniformTypeIdentifiers \
     -emit-executable \
-    -o "$APP_MACOS/BuatsaverApp" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/BuatsaverApp.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/ContentView.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/SaverGenerator.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/FileDropZone.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernButton.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernTextField.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ConfigurationSection.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ThumbnailCache.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Models/BuatsaverError.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Utilities/ValidationUtility.swift"
+    -o "$APP_MACOS/BuatsaverApp_arm64" \
+    "${SOURCE_FILES[@]}"
+
+echo "  Building for x86_64..."
+swiftc \
+    -target x86_64-apple-macos12.0 \
+    -O \
+    -framework SwiftUI \
+    -framework AppKit \
+    -framework AVFoundation \
+    -framework UniformTypeIdentifiers \
+    -emit-executable \
+    -o "$APP_MACOS/BuatsaverApp_x86_64" \
+    "${SOURCE_FILES[@]}"
+
+echo "  Creating universal binary..."
+lipo -create \
+    "$APP_MACOS/BuatsaverApp_arm64" \
+    "$APP_MACOS/BuatsaverApp_x86_64" \
+    -output "$APP_MACOS/BuatsaverApp"
+
+# Clean up architecture-specific binaries
+rm "$APP_MACOS/BuatsaverApp_arm64" "$APP_MACOS/BuatsaverApp_x86_64"
 
 # Copy Info.plist
 cp "$PROJECT_ROOT/BuatsaverApp/Info.plist" "$APP_CONTENTS/Info.plist"
