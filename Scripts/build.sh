@@ -105,8 +105,8 @@ elif [ -f "$PROJECT_ROOT/Resources/AppIcon.icns" ]; then
     cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$APP_RESOURCES/AppIcon.icns"
 fi
 
-# The Swift source file is not needed in the final app bundle,
-# since it's compiled into the screensaver bundle separately
+# Copy Swift source file for runtime compilation by SaverGenerator
+cp "$PROJECT_ROOT/BuatsaverScreensaver/Sources/BuatsaverView.swift" "$APP_RESOURCES/BuatsaverView.swift"
 
 echo "✅ Application bundle created at: $APP_BUNDLE"
 
