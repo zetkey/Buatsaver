@@ -8,12 +8,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Read version from VERSION file
-if [ -f "VERSION" ]; then
-    VERSION=$(cat VERSION)
+# Prefer VERSION from environment
+if [ -n "$VERSION" ]; then
+    echo "Using VERSION from environment: $VERSION"
 else
-    echo "Error: VERSION file not found"
-    exit 1
+    # fallback to VERSION file for local dev use
+    if [ -f "VERSION" ]; then
+        VERSION=$(cat VERSION)
+        echo "Using VERSION from VERSION file: $VERSION"
+    else
+        echo "Error: VERSION not provided and VERSION file not found."
+        exit 1
+    fi
 fi
 
 DMG_NAME="${APP_NAME}-${VERSION}.dmg"

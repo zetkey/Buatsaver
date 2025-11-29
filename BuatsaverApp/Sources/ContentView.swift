@@ -302,6 +302,12 @@ struct ContentView: View {
                 return
             }
 
+            // Capture main-actor state before hopping to a background queue
+            let localVideoURL = videoURL
+            let localThumbnail = thumbnailImage
+            let localSaverName = saverName
+            let localSaverIdentifier = saverIdentifier
+
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     // Update progress as each step completes
@@ -311,10 +317,10 @@ struct ContentView: View {
 
                     try SaverGenerator.createSaver(
                         at: targetURL,
-                        video: videoURL,
-                        thumbnail: thumbnailImage,
-                        name: saverName,
-                        identifier: saverIdentifier,
+                        video: localVideoURL,
+                        thumbnail: localThumbnail,
+                        name: localSaverName,
+                        identifier: localSaverIdentifier,
                         progressCallback: { message in
                             DispatchQueue.main.async {
                                 self.progressMessage = message

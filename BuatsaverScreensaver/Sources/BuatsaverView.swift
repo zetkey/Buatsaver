@@ -9,16 +9,19 @@
 import AVFoundation
 import AVKit
 import Cocoa
+import IOKit.pwr_mgt
 import ScreenSaver
 
 @objc(BuatsaverView)
 @objcMembers
+@MainActor
 class BuatsaverView: ScreenSaverView {
 
     private var playerLayer: AVPlayerLayer?
-    private var player: AVPlayer?
-    private var playerItem: AVPlayerItem?
+    private var player: AVQueuePlayer?
+    private var playerLooper: AVPlayerLooper?
     private var videoURL: URL?
+    private var noSleepAssertionID: IOPMAssertionID = IOPMAssertionID(0)
 
     // MARK: - Initialization
 
@@ -48,12 +51,50 @@ class BuatsaverView: ScreenSaverView {
         findVideo()
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            // Prevent display sleep while screensaver is active
+            IOPMAssertionCreateWithName(
+                kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                "Buatsaver is running" as CFString,
+                &noSleepAssertionID
+            )
+        } else {
+            // Release the assertion when the view is removed
+            if noSleepAssertionID != kIOPMNullAssertionID {
+                IOPMAssertionRelease(noSleepAssertionID)
+                noSleepAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
+            }
+        }
+    }
+
     deinit {
-        // Remove all observers
+        // Remove any remaining notifications
         NotificationCenter.default.removeObserver(self)
-        player?.currentItem?.removeObserver(self, forKeyPath: "status")
+
+        // Ensure cleanup happens on main thread
+        MainActor.assumeIsolated { [weak self] in
+            self?.tearDownPlayer()
+        }
+    }
+
+    @MainActor
+    private func tearDownPlayer() {
+        // Clean up player
         player?.pause()
+        player?.currentItem?.cancelPendingSeeks()
+        player?.currentItem?.asset.cancelLoading()
+
+        // Remove notifications
+        NotificationCenter.default.removeObserver(self)
+
+        // Clean up layers and references
         playerLayer?.removeFromSuperlayer()
+        playerLayer = nil
+        playerLooper = nil
+        player = nil
     }
 
     // MARK: - Video Discovery
@@ -61,19 +102,24 @@ class BuatsaverView: ScreenSaverView {
     private func findVideo() {
         let bundle = Bundle(for: type(of: self))
 
-        // Try to find video.mp4 or video.mov
-        if let mp4URL = bundle.url(forResource: "video", withExtension: "mp4") {
-            videoURL = mp4URL
-        } else if let movURL = bundle.url(forResource: "video", withExtension: "mov") {
-            videoURL = movURL
-        } else {
-            NSLog(
-                "Buatsaver ERROR: No video found in bundle at \(bundle.resourcePath ?? "unknown path")"
-            )
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let videoURL: URL?
 
-            // Set red background to indicate error
-            if let layer = layer {
-                layer.backgroundColor = NSColor.red.cgColor
+            if let mp4URL = bundle.url(forResource: "video", withExtension: "mp4") {
+                videoURL = mp4URL
+            } else if let movURL = bundle.url(forResource: "video", withExtension: "mov") {
+                videoURL = movURL
+            } else {
+                videoURL = nil
+            }
+
+            DispatchQueue.main.async {
+                self?.videoURL = videoURL
+                if videoURL != nil {
+                    self?.setupPlayer()
+                } else {
+                    self?.layer?.backgroundColor = NSColor.red.cgColor
+                }
             }
         }
     }
@@ -81,67 +127,51 @@ class BuatsaverView: ScreenSaverView {
     // MARK: - Player Setup
 
     private func setupPlayer() {
-        guard let url = videoURL, let viewLayer = layer else {
-            NSLog("Buatsaver ERROR: Cannot setup player")
-            return
-        }
+        guard let url = videoURL, let viewLayer = layer else { return }
 
-        // Remove observer from previous player item if exists
-        if let existingPlayerItem = playerItem {
-            existingPlayerItem.removeObserver(self, forKeyPath: "status")
-        }
+        // Remove old player first
+        tearDownPlayer()
 
-        // Create player
-        let newPlayerItem = AVPlayerItem(url: url)
-        playerItem = newPlayerItem
-        player = AVPlayer(playerItem: newPlayerItem)
-        player?.actionAtItemEnd = .none
-        player?.isMuted = true
+        // Configure asset with preloaded keys for optimal performance
+        let asset = AVAsset(url: url)
+        let keys = ["playable", "duration", "tracks"]
 
-        // Create player layer
-        let newPlayerLayer = AVPlayerLayer(player: player)
-        newPlayerLayer.frame = bounds
-        newPlayerLayer.videoGravity = .resizeAspectFill
-        newPlayerLayer.backgroundColor = NSColor.black.cgColor
+        // Create player item with preloaded asset keys
+        let playerItem = AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: keys)
 
-        // Remove old layer if exists
-        playerLayer?.removeFromSuperlayer()
+        // Optimize buffering for smooth playback
+        playerItem.preferredForwardBufferDuration = 10.0
 
-        // Add new layer
-        viewLayer.addSublayer(newPlayerLayer)
-        playerLayer = newPlayerLayer
+        // Create queue player for seamless looping
+        let queuePlayer = AVQueuePlayer(playerItem: playerItem)
+        queuePlayer.volume = 0
+        queuePlayer.automaticallyWaitsToMinimizeStalling = true  // CRITICAL: prevents stuttering
+        queuePlayer.preventsDisplaySleepDuringVideoPlayback = false
 
-        // Setup looping notification
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(playerItemDidReachEnd(_:)),
-            name: .AVPlayerItemDidPlayToEndTime,
-            object: newPlayerItem
-        )
+        // Configure player layer with background to prevent black flashes
+        let playerLayer = AVPlayerLayer(player: queuePlayer)
+        playerLayer.frame = bounds
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.backgroundColor = NSColor.black.cgColor  // Prevent white/transparent flashes
+        playerLayer.needsDisplayOnBoundsChange = true
+        playerLayer.contentsGravity = .resizeAspectFill
+        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
 
-        // Observe player status
-        newPlayerItem.addObserver(self, forKeyPath: "status", options: [.new], context: nil)
-    }
+        // Setup references
+        self.player = queuePlayer
+        self.playerLayer = playerLayer
+        viewLayer.addSublayer(playerLayer)
 
-    override func observeValue(
-        forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?,
-        context: UnsafeMutableRawPointer?
-    ) {
-        if keyPath == "status" {
-            if let statusNumber = change?[.newKey] as? NSNumber {
-                let status = AVPlayerItem.Status(rawValue: statusNumber.intValue)
+        // Setup seamless looping with AVPlayerLooper using time range
+        // This ensures the entire video duration is used for looping
+        let duration = asset.duration
+        let timeRange = CMTimeRange(start: .zero, duration: duration)
+        let playerLooper = AVPlayerLooper(
+            player: queuePlayer, templateItem: playerItem, timeRange: timeRange)
+        self.playerLooper = playerLooper
 
-                if status == .failed, let error = player?.currentItem?.error {
-                    NSLog("Buatsaver ERROR: Player failed - \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-
-    @objc private func playerItemDidReachEnd(_ notification: Notification) {
-        guard let item = notification.object as? AVPlayerItem else { return }
-        item.seek(to: .zero, completionHandler: nil)
-        player?.play()
+        // Start playback
+        queuePlayer.play()
     }
 
     // MARK: - Animation Lifecycle
@@ -149,18 +179,21 @@ class BuatsaverView: ScreenSaverView {
     override func startAnimation() {
         super.startAnimation()
 
-        // Setup player if not already done
         if player == nil {
             setupPlayer()
+        } else {
+            player?.play()
         }
-
-        // Start playing
-        player?.play()
     }
 
     override func stopAnimation() {
         super.stopAnimation()
         player?.pause()
+
+        // Ensure cleanup happens on main thread
+        MainActor.assumeIsolated { [weak self] in
+            self?.tearDownPlayer()
+        }
     }
 
     // MARK: - Layout

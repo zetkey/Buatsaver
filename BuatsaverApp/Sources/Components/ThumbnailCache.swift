@@ -8,7 +8,7 @@
 import AppKit
 import AVFoundation
 
-class ThumbnailCache {
+class ThumbnailCache: @unchecked Sendable {
     private let cache = NSCache<NSString, NSImage>()
     private let cacheQueue = DispatchQueue(label: "thumbnailCacheQueue", qos: .utility)
     

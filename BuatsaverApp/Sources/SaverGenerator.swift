@@ -138,7 +138,7 @@ struct SaverGenerator {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/swiftc")
         task.arguments = [
-            "-target", "x86_64-apple-macos12.0",
+            "-target", "arm64-apple-macos12.0",
             "-emit-library",
             "-module-name", moduleName,
             "-framework", "ScreenSaver",
@@ -158,7 +158,7 @@ struct SaverGenerator {
         // Set secure environment for compilation
         task.environment = [
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-            "HOME": NSHomeDirectory()
+            "HOME": NSHomeDirectory(),
         ]
 
         try task.run()
@@ -167,7 +167,8 @@ struct SaverGenerator {
         guard task.terminationStatus == 0 else {
             // Get stderr output for detailed error message
             let errorData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown compilation error"
+            let errorMessage =
+                String(data: errorData, encoding: .utf8) ?? "Unknown compilation error"
 
             throw SaverGeneratorError.compilationFailed(errorMessage)
         }

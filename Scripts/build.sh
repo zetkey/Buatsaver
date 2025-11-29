@@ -33,7 +33,7 @@ mkdir -p "$SAVER_RESOURCES"
 # Compile the screensaver as a dynamic library with optimizations
 # Optimize for speed (-O flag)
 swiftc \
-    -target x86_64-apple-macos12.0 \
+    -target arm64-apple-macos12.0 \
     -O \
     -emit-library \
     -module-name BuatsaverScreensaver \
@@ -71,7 +71,7 @@ mkdir -p "$APP_RESOURCES"
 # Compile the app with optimizations
 # Optimize for speed (-O flag)
 swiftc \
-    -target x86_64-apple-macos12.0 \
+    -target arm64-apple-macos12.0 \
     -O \
     -framework SwiftUI \
     -framework AppKit \
