@@ -30,9 +30,11 @@ rm -rf "$SAVER_BUNDLE"
 mkdir -p "$SAVER_MACOS"
 mkdir -p "$SAVER_RESOURCES"
 
-# Compile the screensaver as a dynamic library
+# Compile the screensaver as a dynamic library with optimizations
+# Optimize for speed (-O flag)
 swiftc \
     -target x86_64-apple-macos12.0 \
+    -O \
     -emit-library \
     -module-name BuatsaverScreensaver \
     -framework ScreenSaver \
@@ -66,9 +68,11 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS"
 mkdir -p "$APP_RESOURCES"
 
-# Compile the app
+# Compile the app with optimizations
+# Optimize for speed (-O flag)
 swiftc \
     -target x86_64-apple-macos12.0 \
+    -O \
     -framework SwiftUI \
     -framework AppKit \
     -framework AVFoundation \
@@ -80,7 +84,11 @@ swiftc \
     "$PROJECT_ROOT/BuatsaverApp/Sources/SaverGenerator.swift" \
     "$PROJECT_ROOT/BuatsaverApp/Sources/Components/FileDropZone.swift" \
     "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernButton.swift" \
-    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernTextField.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernTextField.swift" \
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ConfigurationSection.swift" \
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ThumbnailCache.swift" \
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Models/BuatsaverError.swift" \
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Utilities/ValidationUtility.swift"
 
 # Copy Info.plist
 cp "$PROJECT_ROOT/BuatsaverApp/Info.plist" "$APP_CONTENTS/Info.plist"
@@ -91,12 +99,14 @@ cp "$PROJECT_ROOT/BuatsaverApp/Info.plist" "$APP_CONTENTS/Info.plist"
 # Copy app icon if it exists
 if [ -f "$PROJECT_ROOT/BuatsaverApp/AppIcon.icns" ]; then
     cp "$PROJECT_ROOT/BuatsaverApp/AppIcon.icns" "$APP_RESOURCES/AppIcon.icns"
+elif [ -f "$PROJECT_ROOT/BuatsaverApp/Resources/AppIcon.icns" ]; then
+    cp "$PROJECT_ROOT/BuatsaverApp/Resources/AppIcon.icns" "$APP_RESOURCES/AppIcon.icns"
 elif [ -f "$PROJECT_ROOT/Resources/AppIcon.icns" ]; then
     cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$APP_RESOURCES/AppIcon.icns"
 fi
 
-# Copy Swift source file for runtime compilation
-cp "$PROJECT_ROOT/BuatsaverScreensaver/Sources/BuatsaverView.swift" "$APP_RESOURCES/BuatsaverView.swift"
+# The Swift source file is not needed in the final app bundle,
+# since it's compiled into the screensaver bundle separately
 
 echo "✅ Application bundle created at: $APP_BUNDLE"
 

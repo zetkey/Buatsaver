@@ -30,6 +30,9 @@ struct FileDropZone: View {
                                 : Color(nsColor: .controlBackgroundColor))
                 )
                 .animation(.easeInOut(duration: 0.2), value: isDragging)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Video file drop zone")
+                .accessibilityHint("Drag and drop a video file here, or click to select a video file")
 
             VStack(spacing: 16) {
                 if let videoURL = file {
@@ -38,6 +41,7 @@ struct FileDropZone: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 32))
                             .foregroundColor(.green)
+                            .accessibilityHidden(true)
 
                         Text(videoURL.lastPathComponent)
                             .font(.system(size: 13, weight: .medium))
@@ -46,6 +50,7 @@ struct FileDropZone: View {
                             .multilineTextAlignment(.center)
                             .truncationMode(.middle)
                             .padding(.horizontal, 20)
+                            .accessibilityLabel("Selected video file: \(videoURL.lastPathComponent)")
 
                         Button("Choose Different Video") {
                             selectVideo()
@@ -53,6 +58,7 @@ struct FileDropZone: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundColor(.accentColor)
+                        .accessibilityLabel("Choose a different video file")
                     }
                     .padding()
                 } else {
@@ -62,6 +68,7 @@ struct FileDropZone: View {
                             .font(.system(size: 32))
                             .foregroundColor(isDragging ? .accentColor : .secondary)
                             .animation(.easeInOut(duration: 0.2), value: isDragging)
+                            .accessibilityHidden(true)
 
                         Text(isDragging ? "Drop video here" : "Drag video here")
                             .font(.system(size: 14, weight: .medium))
@@ -70,6 +77,7 @@ struct FileDropZone: View {
                         Text("or")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
 
                         Button("Choose Video File") {
                             selectVideo()
@@ -77,6 +85,7 @@ struct FileDropZone: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundColor(.accentColor)
+                        .accessibilityLabel("Choose video file from disk")
 
                         Text("Supports .mp4 and .mov")
                             .font(.system(size: 10))
@@ -102,6 +111,10 @@ struct FileDropZone: View {
                 }
             }
             return true
+        }
+        .onTapGesture {
+            // Allow clicking to select file as an alternative to drag-and-drop
+            selectVideo()
         }
     }
 

@@ -17,6 +17,7 @@ class BuatsaverView: ScreenSaverView {
 
     private var playerLayer: AVPlayerLayer?
     private var player: AVPlayer?
+    private var playerItem: AVPlayerItem?
     private var videoURL: URL?
 
     // MARK: - Initialization
@@ -48,7 +49,9 @@ class BuatsaverView: ScreenSaverView {
     }
 
     deinit {
+        // Remove all observers
         NotificationCenter.default.removeObserver(self)
+        player?.currentItem?.removeObserver(self, forKeyPath: "status")
         player?.pause()
         playerLayer?.removeFromSuperlayer()
     }
@@ -83,9 +86,15 @@ class BuatsaverView: ScreenSaverView {
             return
         }
 
+        // Remove observer from previous player item if exists
+        if let existingPlayerItem = playerItem {
+            existingPlayerItem.removeObserver(self, forKeyPath: "status")
+        }
+
         // Create player
-        let playerItem = AVPlayerItem(url: url)
-        player = AVPlayer(playerItem: playerItem)
+        let newPlayerItem = AVPlayerItem(url: url)
+        playerItem = newPlayerItem
+        player = AVPlayer(playerItem: newPlayerItem)
         player?.actionAtItemEnd = .none
         player?.isMuted = true
 
@@ -107,11 +116,11 @@ class BuatsaverView: ScreenSaverView {
             self,
             selector: #selector(playerItemDidReachEnd(_:)),
             name: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem
+            object: newPlayerItem
         )
 
         // Observe player status
-        player?.currentItem?.addObserver(self, forKeyPath: "status", options: [.new], context: nil)
+        newPlayerItem.addObserver(self, forKeyPath: "status", options: [.new], context: nil)
     }
 
     override func observeValue(
