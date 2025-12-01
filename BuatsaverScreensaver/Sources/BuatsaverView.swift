@@ -23,11 +23,41 @@ class BuatsaverView: ScreenSaverView {
     private var videoURL: URL?
     private var noSleepAssertionID: IOPMAssertionID = IOPMAssertionID(0)
 
+    private static let bundledVideoURL: URL? = {
+        let bundle = Bundle(for: BuatsaverView.self)
+        return bundle.url(forResource: "video", withExtension: "mp4")
+            ?? bundle.url(forResource: "video", withExtension: "mov")
+    }()
+
+    // MARK: - Power Management
+
+    @MainActor
+    private func acquireDisplaySleepAssertion() {
+        guard noSleepAssertionID == kIOPMNullAssertionID else { return }
+        let result = IOPMAssertionCreateWithName(
+            kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            "Buatsaver is running" as CFString,
+            &noSleepAssertionID
+        )
+
+        if result != kIOReturnSuccess {
+            noSleepAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
+        }
+    }
+
+    @MainActor
+    private func releaseDisplaySleepAssertion() {
+        guard noSleepAssertionID != kIOPMNullAssertionID else { return }
+        IOPMAssertionRelease(noSleepAssertionID)
+        noSleepAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
+    }
+
     // MARK: - Initialization
 
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
-        animationTimeInterval = 1.0 / 30.0
+        animationTimeInterval = .greatestFiniteMagnitude  // Disable ScreenSaver timer; AVPlayer drives frames
         wantsLayer = true
 
         // Set background color
@@ -40,7 +70,7 @@ class BuatsaverView: ScreenSaverView {
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        animationTimeInterval = 1.0 / 30.0
+        animationTimeInterval = .greatestFiniteMagnitude  // Disable ScreenSaver timer; AVPlayer drives frames
         wantsLayer = true
 
         // Set background color
@@ -54,19 +84,9 @@ class BuatsaverView: ScreenSaverView {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil {
-            // Prevent display sleep while screensaver is active
-            IOPMAssertionCreateWithName(
-                kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
-                IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                "Buatsaver is running" as CFString,
-                &noSleepAssertionID
-            )
+            acquireDisplaySleepAssertion()
         } else {
-            // Release the assertion when the view is removed
-            if noSleepAssertionID != kIOPMNullAssertionID {
-                IOPMAssertionRelease(noSleepAssertionID)
-                noSleepAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
-            }
+            releaseDisplaySleepAssertion()
         }
     }
 
@@ -76,6 +96,7 @@ class BuatsaverView: ScreenSaverView {
 
         // Ensure cleanup happens on main thread
         MainActor.assumeIsolated { [weak self] in
+            self?.releaseDisplaySleepAssertion()
             self?.tearDownPlayer()
         }
     }
@@ -103,38 +124,25 @@ class BuatsaverView: ScreenSaverView {
         playerLayer = nil
 
         // Remove all items from queue player
-        if let queuePlayer = player {
-            queuePlayer.removeAllItems()
-        }
+        player?.removeAllItems()
 
         // Release player reference
         player = nil
+
+        // Release any outstanding power assertions
+        releaseDisplaySleepAssertion()
     }
 
     // MARK: - Video Discovery
 
     private func findVideo() {
-        let bundle = Bundle(for: type(of: self))
+        let url = Self.bundledVideoURL
+        videoURL = url
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let videoURL: URL?
-
-            if let mp4URL = bundle.url(forResource: "video", withExtension: "mp4") {
-                videoURL = mp4URL
-            } else if let movURL = bundle.url(forResource: "video", withExtension: "mov") {
-                videoURL = movURL
-            } else {
-                videoURL = nil
-            }
-
-            DispatchQueue.main.async {
-                self?.videoURL = videoURL
-                if videoURL != nil {
-                    self?.setupPlayer()
-                } else {
-                    self?.layer?.backgroundColor = NSColor.red.cgColor
-                }
-            }
+        if url != nil {
+            setupPlayer()
+        } else {
+            layer?.backgroundColor = NSColor.red.cgColor
         }
     }
 
@@ -193,6 +201,8 @@ class BuatsaverView: ScreenSaverView {
     public override func startAnimation() {
         super.startAnimation()
 
+        acquireDisplaySleepAssertion()
+
         if player == nil {
             setupPlayer()
         } else {
@@ -204,6 +214,7 @@ class BuatsaverView: ScreenSaverView {
         super.stopAnimation()
 
         // CRITICAL: Properly tear down player to prevent memory leaks and hanging process
+        releaseDisplaySleepAssertion()
         tearDownPlayer()
     }
 
@@ -211,6 +222,10 @@ class BuatsaverView: ScreenSaverView {
 
     public override func draw(_ rect: NSRect) {
         super.draw(rect)
+    }
+
+    public override func animateOneFrame() {
+        // Intentionally left blank. AVPlayer handles all visual updates, so we disable the timer.
     }
 
     public override func layout() {
