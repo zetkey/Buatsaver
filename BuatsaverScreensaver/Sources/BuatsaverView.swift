@@ -9,7 +9,6 @@
 import AVFoundation
 import AVKit
 import Cocoa
-import IOKit.pwr_mgt
 import ScreenSaver
 
 @objc(BuatsaverView)
@@ -18,10 +17,9 @@ import ScreenSaver
 class BuatsaverView: ScreenSaverView {
 
     private var playerLayer: AVPlayerLayer?
-    private var player: AVQueuePlayer?
-    private var playerLooper: AVPlayerLooper?
+    private var player: AVPlayer?
+    private var playbackObserver: NSObjectProtocol?
     private var videoURL: URL?
-    private var noSleepAssertionID: IOPMAssertionID = IOPMAssertionID(0)
 
     private static let bundledVideoURL: URL? = {
         let bundle = Bundle(for: BuatsaverView.self)
@@ -29,35 +27,11 @@ class BuatsaverView: ScreenSaverView {
             ?? bundle.url(forResource: "video", withExtension: "mov")
     }()
 
-    // MARK: - Power Management
-
-    @MainActor
-    private func acquireDisplaySleepAssertion() {
-        guard noSleepAssertionID == kIOPMNullAssertionID else { return }
-        let result = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "Buatsaver is running" as CFString,
-            &noSleepAssertionID
-        )
-
-        if result != kIOReturnSuccess {
-            noSleepAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
-        }
-    }
-
-    @MainActor
-    private func releaseDisplaySleepAssertion() {
-        guard noSleepAssertionID != kIOPMNullAssertionID else { return }
-        IOPMAssertionRelease(noSleepAssertionID)
-        noSleepAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
-    }
-
     // MARK: - Initialization
 
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
-        animationTimeInterval = .greatestFiniteMagnitude  // Disable ScreenSaver timer; AVPlayer drives frames
+        animationTimeInterval = 1.0 / 60.0
         wantsLayer = true
 
         // Set background color
@@ -70,7 +44,7 @@ class BuatsaverView: ScreenSaverView {
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        animationTimeInterval = .greatestFiniteMagnitude  // Disable ScreenSaver timer; AVPlayer drives frames
+        animationTimeInterval = 1.0 / 60.0
         wantsLayer = true
 
         // Set background color
@@ -81,23 +55,19 @@ class BuatsaverView: ScreenSaverView {
         findVideo()
     }
 
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil {
-            acquireDisplaySleepAssertion()
-        } else {
-            releaseDisplaySleepAssertion()
-        }
-    }
-
     deinit {
         // Remove any remaining notifications
         NotificationCenter.default.removeObserver(self)
 
-        // Ensure cleanup happens on main thread
-        MainActor.assumeIsolated { [weak self] in
-            self?.releaseDisplaySleepAssertion()
+        Task { @MainActor [weak self] in
             self?.tearDownPlayer()
+        }
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            tearDownPlayer()
         }
     }
 
@@ -107,9 +77,11 @@ class BuatsaverView: ScreenSaverView {
         player?.pause()
         player?.rate = 0
 
-        // CRITICAL: Invalidate looper to break retain cycle
-        playerLooper?.disableLooping()
-        playerLooper = nil
+        // Remove looping observer
+        if let observer = playbackObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackObserver = nil
+        }
 
         // Cancel pending operations
         player?.currentItem?.cancelPendingSeeks()
@@ -123,14 +95,10 @@ class BuatsaverView: ScreenSaverView {
         playerLayer?.removeFromSuperlayer()
         playerLayer = nil
 
-        // Remove all items from queue player
-        player?.removeAllItems()
-
         // Release player reference
+        player?.replaceCurrentItem(with: nil)
         player = nil
 
-        // Release any outstanding power assertions
-        releaseDisplaySleepAssertion()
     }
 
     // MARK: - Video Discovery
@@ -160,18 +128,18 @@ class BuatsaverView: ScreenSaverView {
 
         // Create player item with preloaded asset keys
         let playerItem = AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: keys)
+        playerItem.preferredForwardBufferDuration = 4.0
+        playerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = false
 
-        // Optimize buffering for smooth playback
-        playerItem.preferredForwardBufferDuration = 10.0
-
-        // Create queue player for seamless looping
-        let queuePlayer = AVQueuePlayer(playerItem: playerItem)
-        queuePlayer.volume = 0
-        queuePlayer.automaticallyWaitsToMinimizeStalling = true  // CRITICAL: prevents stuttering
-        queuePlayer.preventsDisplaySleepDuringVideoPlayback = false
+        // Create player for seamless looping
+        let player = AVPlayer(playerItem: playerItem)
+        player.actionAtItemEnd = .none
+        player.isMuted = true
+        player.automaticallyWaitsToMinimizeStalling = true
+        player.preventsDisplaySleepDuringVideoPlayback = false
 
         // Configure player layer with background to prevent black flashes
-        let playerLayer = AVPlayerLayer(player: queuePlayer)
+        let playerLayer = AVPlayerLayer(player: player)
         playerLayer.frame = bounds
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.backgroundColor = NSColor.black.cgColor  // Prevent white/transparent flashes
@@ -180,28 +148,30 @@ class BuatsaverView: ScreenSaverView {
         playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
 
         // Setup references
-        self.player = queuePlayer
+        self.player = player
         self.playerLayer = playerLayer
         viewLayer.addSublayer(playerLayer)
 
-        // Setup seamless looping with AVPlayerLooper using time range
-        // This ensures the entire video duration is used for looping
-        let duration = asset.duration
-        let timeRange = CMTimeRange(start: .zero, duration: duration)
-        let playerLooper = AVPlayerLooper(
-            player: queuePlayer, templateItem: playerItem, timeRange: timeRange)
-        self.playerLooper = playerLooper
+        playbackObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let player = self?.player else { return }
+                player.seek(to: .zero)
+                player.play()
+            }
+        }
 
         // Start playback
-        queuePlayer.play()
+        player.play()
     }
 
     // MARK: - Animation Lifecycle
 
     public override func startAnimation() {
         super.startAnimation()
-
-        acquireDisplaySleepAssertion()
 
         if player == nil {
             setupPlayer()
@@ -214,7 +184,6 @@ class BuatsaverView: ScreenSaverView {
         super.stopAnimation()
 
         // CRITICAL: Properly tear down player to prevent memory leaks and hanging process
-        releaseDisplaySleepAssertion()
         tearDownPlayer()
     }
 
