@@ -102,6 +102,8 @@ SOURCE_FILES=(
     "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernButton.swift"
     "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ModernTextField.swift"
     "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ConfigurationSection.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/SectionCard.swift"
+    "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ThumbnailPreview.swift"
     "$PROJECT_ROOT/BuatsaverApp/Sources/Components/ThumbnailCache.swift"
     "$PROJECT_ROOT/BuatsaverApp/Sources/Models/BuatsaverError.swift"
     "$PROJECT_ROOT/BuatsaverApp/Sources/Utilities/ValidationUtility.swift"

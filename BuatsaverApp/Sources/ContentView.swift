@@ -33,6 +33,8 @@ struct ContentView: View {
     @State private var isGeneratingThumbnail: Bool = false
     /// Progress message during screensaver generation
     @State private var progressMessage: String = ""
+    /// Handle for cancelling in-flight thumbnail generation work
+    @State private var thumbnailTask: Task<Void, Never>?
 
     private var bundlePrefix: String {
         var hostName = ProcessInfo.processInfo.hostName
@@ -55,164 +57,115 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Clean background
-            Color(nsColor: NSColor.windowBackgroundColor)
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                    .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // Minimal header
-                VStack(spacing: 8) {
-                    Text("Buatsaver")
-                        .font(.system(size: 28, weight: .light, design: .default))
-                        .foregroundColor(.primary)
-                        .accessibilityLabel("Buatsaver Application")
-
-                    Text("Create video screensavers")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundColor(.secondary)
-                        .accessibilityLabel("Create custom video screensavers from your video files")
-                }
-                .padding(.top, 40)
-                .padding(.bottom, 32)
-
-                // Main content
                 VStack(spacing: 24) {
-                    // Video selection
-                    FileDropZone(
-                        file: $videoURL,
-                        isDragging: $isDragging,
-                        onFileDrop: { url in
-                            // Clear previous thumbnail from cache if we had one
-                            if let previousURL = videoURL {
-                                ThumbnailCache.shared.removeThumbnail(for: previousURL)
-                            }
-                            videoURL = url
-                            thumbnailImage = nil  // Clear previous thumbnail
-                            generateThumbnail(from: url)
-                        }
-                    )
+                    header
 
-                    // Thumbnail preview (compact)
-                    if isGeneratingThumbnail {
-                        HStack(spacing: 12) {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 80, height: 45)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Generating thumbnail...")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                    } else if let img = thumbnailImage {
-                        HStack(spacing: 12) {
-                            Image(nsImage: img)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 80, height: 45)
-                                .cornerRadius(6)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                    HStack(alignment: .top, spacing: 20) {
+                        VStack(spacing: 16) {
+                            SectionCard(title: "Source Video") {
+                                FileDropZone(
+                                    file: $videoURL,
+                                    isDragging: $isDragging,
+                                    onFileDrop: handleFileDrop
                                 )
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Thumbnail")
-                                    .font(.system(size: 12, weight: .medium))
+                                Text("Drag & drop an .mp4 or .mov file, or click to browse")
+                                    .font(.system(size: 11))
                                     .foregroundColor(.secondary)
-
-                                Button("Change") {
-                                    selectThumbnail()
-                                }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 11))
-                                .foregroundColor(.accentColor)
                             }
 
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                    }
-
-                    Divider()
-                        .padding(.horizontal, 20)
-
-                    // Configuration fields
-                    ConfigurationSection(
-                        saverName: $saverName,
-                        saverIdentifier: $saverIdentifier,
-                        isBundleIdentifierValid: isBundleIdentifierValid
-                    )
-                    .onChange(of: saverName) { _ in updateBundleID() }
-                    .padding(.horizontal, 20)
-
-                    // Progress message
-                    if !progressMessage.isEmpty {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .frame(width: 12, height: 12)
-                            Text(progressMessage)
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 20)
-                    }
-
-                    // Status message
-                    if !statusMessage.isEmpty {
-                        HStack(spacing: 8) {
-                            Image(
-                                systemName: statusIsError
-                                    ? "exclamationmark.circle" : "checkmark.circle"
-                            )
-                            .font(.system(size: 12))
-                            Text(statusMessage)
-                                .font(.system(size: 12))
-                        }
-                        .foregroundColor(statusIsError ? .red : .green)
-                        .padding(.horizontal, 20)
-                    }
-
-                    // Generate button
-                    Button(action: generateSaver) {
-                        HStack(spacing: 8) {
-                            if isGenerating {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                                    .frame(width: 14, height: 14)
+                            SectionCard(title: "Thumbnail") {
+                                ThumbnailPreview(
+                                    isGeneratingThumbnail: isGeneratingThumbnail,
+                                    thumbnailImage: thumbnailImage,
+                                    onSelectThumbnail: selectThumbnail
+                                )
                             }
-                            Text(isGenerating ? "Generating..." : "Generate Screensaver")
-                                .font(.system(size: 14, weight: .medium))
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
-                            videoURL == nil || saverName.isEmpty || isGenerating
-                                ? Color.secondary.opacity(0.3) : Color.accentColor
-                        )
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+
+                        VStack(spacing: 16) {
+                            SectionCard(title: "Configuration") {
+                                ConfigurationSection(
+                                    saverName: $saverName,
+                                    saverIdentifier: $saverIdentifier,
+                                    isBundleIdentifierValid: isBundleIdentifierValid
+                                )
+                                .onChange(of: saverName) { _ in updateBundleID() }
+                            }
+
+                            if !progressMessage.isEmpty {
+                                SectionCard(title: "Progress") {
+                                    Label {
+                                        Text(progressMessage)
+                                            .font(.system(size: 12, weight: .medium))
+                                    } icon: {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                    }
+                                    .foregroundColor(.secondary)
+                                }
+                            }
+
+                            if !statusMessage.isEmpty {
+                                SectionCard(title: "Status") {
+                                    Label(statusMessage, systemImage: statusIsError ? "exclamationmark.triangle" : "checkmark.circle.fill")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(statusIsError ? .red : .green)
+                                }
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(videoURL == nil || saverName.isEmpty || isGenerating)
-                    .keyboardShortcut(.return, modifiers: [.command])
-                    .accessibilityLabel(isGenerating ? "Generating screensaver" : "Generate Screensaver")
-                    .accessibilityHint("Create a new screensaver from the selected video")
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
+
+                    SectionCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Final step")
+                                .font(.system(size: 14, weight: .semibold))
+
+                            Text("We’ll package your video, thumbnail, and metadata into a signed screensaver bundle.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+
+                            Button(action: generateSaver) {
+                                Label {
+                                    Text(isGenerating ? "Generating..." : "Generate Screensaver")
+                                        .font(.system(size: 14, weight: .semibold))
+                                } icon: {
+                                    if isGenerating {
+                                        ProgressView()
+                                            .scaleEffect(0.9)
+                                    } else {
+                                        Image(systemName: "sparkles")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .tint(.accentColor)
+                            .disabled(generateButtonDisabled)
+                            .keyboardShortcut(.return, modifiers: [.command])
+                            .accessibilityLabel(isGenerating ? "Generating screensaver" : "Generate Screensaver")
+                        }
+                    }
                 }
-                .padding(.bottom, 40)
+                .frame(maxWidth: min(proxy.size.width - 40, 860))
+                .padding(24)
             }
-            .frame(maxWidth: 500)
         }
         .onAppear {
             updateBundleID()
+        }
+        .onDisappear {
+            thumbnailTask?.cancel()
         }
     }
 
@@ -241,19 +194,21 @@ struct ContentView: View {
     /// Generates a thumbnail image from the specified video URL
     /// Uses caching to avoid regenerating thumbnails for the same video
     /// - Parameter url: The URL of the video file to generate a thumbnail from
+    @MainActor
     func generateThumbnail(from url: URL) {
-        // Check if thumbnail is already cached
+        thumbnailTask?.cancel()
+
         if let cachedThumbnail = ThumbnailCache.shared.getThumbnail(for: url) {
             self.thumbnailImage = cachedThumbnail
             return
         }
 
         isGeneratingThumbnail = true
-        DispatchQueue.global(qos: .userInitiated).async {
+
+        thumbnailTask = Task(priority: .userInitiated) {
             let asset = AVURLAsset(url: url)
             let imageGenerator = AVAssetImageGenerator(asset: asset)
             imageGenerator.appliesPreferredTrackTransform = true
-            // Set time to 20% into the video for a better thumbnail, or 1 second if video is short
             let duration = asset.duration
             let thumbnailSeconds = min(max(CMTimeGetSeconds(duration) * 0.2, 1.0), CMTimeGetSeconds(duration))
             let thumbnailTime = CMTime(seconds: thumbnailSeconds, preferredTimescale: duration.timescale)
@@ -263,20 +218,57 @@ struct ContentView: View {
                 let nsImage = NSImage(
                     cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
 
-                // Cache the thumbnail
+                guard !Task.isCancelled else { return }
                 ThumbnailCache.shared.setThumbnail(nsImage, for: url)
 
-                DispatchQueue.main.async {
+                await MainActor.run {
                     self.thumbnailImage = nsImage
                     self.isGeneratingThumbnail = false
                 }
             } catch {
-                DispatchQueue.main.async {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
                     self.statusMessage = "Failed to generate thumbnail from video. Please ensure the video file is valid."
                     self.statusIsError = true
                     self.isGeneratingThumbnail = false
                 }
             }
+        }
+    }
+
+    @MainActor
+    private func handleFileDrop(_ url: URL) {
+        if let previousURL = videoURL {
+            ThumbnailCache.shared.removeThumbnail(for: previousURL)
+        }
+        videoURL = url
+        thumbnailImage = nil
+        generateThumbnail(from: url)
+    }
+
+    private var generateButtonDisabled: Bool {
+        videoURL == nil || saverName.isEmpty || isGenerating
+    }
+
+    private var generateButtonGradient: [Color] {
+        if generateButtonDisabled {
+            return [Color.gray.opacity(0.4), Color.gray.opacity(0.3)]
+        }
+        return [Color.accentColor, Color.purple]
+    }
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            Text("Buatsaver")
+                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .foregroundStyle(LinearGradient(colors: [.white, .white.opacity(0.7)], startPoint: .top, endPoint: .bottom))
+                .accessibilityLabel("Buatsaver Application")
+
+            Text("Craft polished video screensavers with preview thumbnails and custom bundle metadata.")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
         }
     }
 
