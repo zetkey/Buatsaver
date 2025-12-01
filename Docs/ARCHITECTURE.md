@@ -63,6 +63,8 @@ The application follows a clean architectural pattern with distinct responsibili
 **Components/** contains reusable SwiftUI elements:
 - **FileDropZone**: Handles video file drag and drop
 - **ConfigurationSection**: Form for screensaver settings
+- **SectionCard**: Lightweight glassmorphism wrapper for grouping controls
+- **ThumbnailPreview**: Handles thumbnail loading/empty/progress states
 - **ThumbnailCache**: Prevents regenerating thumbnails unnecessarily
 
 **Models/** and **Utilities/** provide supporting code:
@@ -72,11 +74,11 @@ The application follows a clean architectural pattern with distinct responsibili
 ### Screensaver Bundle (BuatsaverScreensaver)
 
 **BuatsaverView.swift** implements the screensaver:
-- Uses AVFoundation for video playback
-- Implements `AVQueuePlayer` with `AVPlayerLooper` for seamless looping
-- Manages the player lifecycle carefully to avoid memory leaks
-- Optimized for smooth, stutter-free playback
-- Follows the ScreenSaver framework properly
+- Uses AVFoundation for video playback with a single `AVPlayer`
+- Manually loops by seeking to `.zero` upon `AVPlayerItemDidPlayToEndTime`
+- Cleans up the player/observers immediately when the host view disappears
+- Targets a 60 fps animation interval for fluid playback
+- Avoids display-sleep assertions so macOS can handle idle timers naturally
 
 ## How Screensaver Generation Works
 
@@ -177,13 +179,13 @@ Performance-wise, it's optimized for efficient file operations and minimal memor
 
 Buatsaver leverages several modern technologies and techniques:
 
-### Video Playback (Version 3.0.0+)
-- **Player**: Uses `AVQueuePlayer` for seamless looping
-- **Looping**: `AVPlayerLooper` for gap-free video loops
-- **Buffering**: 10-second forward buffer for smooth playback
+### Video Playback (Version 3.1+)
+- **Player**: Uses `AVPlayer` with manual looping via `AVPlayerItemDidPlayToEndTime`
+- **Looping**: Seeks to `.zero` on every completion to maintain continuous playback
+- **Buffering**: Uses a modest forward buffer to reduce stutter without overusing memory
 - **Aspect Ratio**: Videos fill the screen while maintaining aspect ratio using `.resizeAspectFill`
 - **Audio Control**: Audio is muted by default (appropriate for screensavers)
-- **Performance**: Optimized to prevent stuttering and minimize CPU usage
+- **Performance**: Targets 60 fps animation interval and aggressive teardown to keep CPU usage low
 
 ### Architecture Support
 - **Universal Binaries**: App and pre-built screensaver support both arm64 and x86_64

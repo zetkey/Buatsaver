@@ -10,7 +10,6 @@ Before building Buatsaver, make sure you have:
 - macOS 12.0 or later
 - Xcode Command Line Tools installed
 - Swift 5.9 or later
-- ImageMagick for icon optimization (install with `brew install imagemagick`)
 
 ### The Build Scripts
 
