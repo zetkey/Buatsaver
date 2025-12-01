@@ -51,7 +51,7 @@ class BuatsaverView: ScreenSaverView {
         findVideo()
     }
 
-    override func viewDidMoveToWindow() {
+    public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil {
             // Prevent display sleep while screensaver is active
@@ -82,8 +82,15 @@ class BuatsaverView: ScreenSaverView {
 
     @MainActor
     private func tearDownPlayer() {
-        // Clean up player
+        // Stop playback first
         player?.pause()
+        player?.rate = 0
+
+        // CRITICAL: Invalidate looper to break retain cycle
+        playerLooper?.disableLooping()
+        playerLooper = nil
+
+        // Cancel pending operations
         player?.currentItem?.cancelPendingSeeks()
         player?.currentItem?.asset.cancelLoading()
 
@@ -91,9 +98,16 @@ class BuatsaverView: ScreenSaverView {
         NotificationCenter.default.removeObserver(self)
 
         // Clean up layers and references
+        playerLayer?.player = nil
         playerLayer?.removeFromSuperlayer()
         playerLayer = nil
-        playerLooper = nil
+
+        // Remove all items from queue player
+        if let queuePlayer = player {
+            queuePlayer.removeAllItems()
+        }
+
+        // Release player reference
         player = nil
     }
 
@@ -176,7 +190,7 @@ class BuatsaverView: ScreenSaverView {
 
     // MARK: - Animation Lifecycle
 
-    override func startAnimation() {
+    public override func startAnimation() {
         super.startAnimation()
 
         if player == nil {
@@ -186,28 +200,25 @@ class BuatsaverView: ScreenSaverView {
         }
     }
 
-    override func stopAnimation() {
+    public override func stopAnimation() {
         super.stopAnimation()
-        player?.pause()
 
-        // Ensure cleanup happens on main thread
-        MainActor.assumeIsolated { [weak self] in
-            self?.tearDownPlayer()
-        }
+        // CRITICAL: Properly tear down player to prevent memory leaks and hanging process
+        tearDownPlayer()
     }
 
     // MARK: - Layout
 
-    override func draw(_ rect: NSRect) {
+    public override func draw(_ rect: NSRect) {
         super.draw(rect)
     }
 
-    override func layout() {
+    public override func layout() {
         super.layout()
         playerLayer?.frame = bounds
     }
 
-    override var frame: NSRect {
+    public override var frame: NSRect {
         didSet {
             playerLayer?.frame = bounds
         }
@@ -215,11 +226,11 @@ class BuatsaverView: ScreenSaverView {
 
     // MARK: - Configuration
 
-    override var hasConfigureSheet: Bool {
+    public override var hasConfigureSheet: Bool {
         return false
     }
 
-    override var configureSheet: NSWindow? {
+    public override var configureSheet: NSWindow? {
         return nil
     }
 }
