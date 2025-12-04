@@ -31,7 +31,7 @@ class BuatsaverView: ScreenSaverView {
 
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
-        animationTimeInterval = 1.0 / 60.0
+        animationTimeInterval = 1.0 / 30.0
         wantsLayer = true
 
         // Set background color
@@ -44,7 +44,7 @@ class BuatsaverView: ScreenSaverView {
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        animationTimeInterval = 1.0 / 60.0
+        animationTimeInterval = 1.0 / 30.0
         wantsLayer = true
 
         // Set background color
@@ -128,7 +128,7 @@ class BuatsaverView: ScreenSaverView {
 
         // Create player item with preloaded asset keys
         let playerItem = AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: keys)
-        playerItem.preferredForwardBufferDuration = 4.0
+        playerItem.preferredForwardBufferDuration = 10.0
         playerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = false
 
         // Create player for seamless looping
