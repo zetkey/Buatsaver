@@ -9,6 +9,7 @@
 import AVFoundation
 import AVKit
 import Cocoa
+import Quartz
 import ScreenSaver
 
 @objc(BuatsaverView)
@@ -20,6 +21,7 @@ class BuatsaverView: ScreenSaverView {
     private var player: AVPlayer?
     private var playbackObserver: NSObjectProtocol?
     private var videoURL: URL?
+    private let startTime = Date()
 
     private static let bundledVideoURL: URL? = {
         let bundle = Bundle(for: BuatsaverView.self)
@@ -56,7 +58,7 @@ class BuatsaverView: ScreenSaverView {
     }
 
     deinit {
-        // Remove any remaining notifications
+        // Remove self from notifications
         NotificationCenter.default.removeObserver(self)
 
         Task { @MainActor [weak self] in
@@ -194,7 +196,44 @@ class BuatsaverView: ScreenSaverView {
     }
 
     public override func animateOneFrame() {
-        // Intentionally left blank. AVPlayer handles all visual updates, so we disable the timer.
+        // Workaround for legacyScreenSaver process hanging
+        // Check if user is active and screen is unlocked -> Force exit
+        guard !isPreview else { return }
+
+        // Wait 2 seconds before checking to allow startup
+        if Date().timeIntervalSince(startTime) > 2.0 {
+            let idleTime = getSystemIdleTime()
+            let screenLocked = isScreenLocked()
+
+            // If user moved mouse (idle < 1.0s) and screen is NOT locked, it means we should stop.
+            // CAUTION: This kills the process. Only run if !isPreview.
+            if idleTime < 1.0 && !screenLocked {
+                // Stop player first
+                tearDownPlayer()
+                // Force exit process to prevent hanging
+                exit(0)
+            }
+        }
+    }
+
+    // MARK: - Workaround Helpers
+
+    private func getSystemIdleTime() -> TimeInterval {
+        // CGEventSource.secondsSinceLastEventType handles HID idle time
+        return CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .mouseMoved)
+    }
+
+    private func isScreenLocked() -> Bool {
+        // Check CGSession dictionary for screen lock status
+        guard let sessionDict = CGSessionCopyCurrentDictionary() as? [String: Any] else {
+            return false
+        }
+
+        if let isLocked = sessionDict["CGSSessionScreenIsLocked"] as? Bool {
+            return isLocked
+        }
+
+        return false
     }
 
     public override func layout() {
